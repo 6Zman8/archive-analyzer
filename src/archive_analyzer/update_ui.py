@@ -59,9 +59,17 @@ class UpdateController:
 
     def attach_menu(self, window, close):
         import tkinter as tk
-        menu = tk.Menu(window)
+        existing = window.cget("menu")
+        menu = window.nametowidget(existing) if existing else tk.Menu(window)
+        end = menu.index("end")
+        for index in range(end + 1 if end is not None else 0):
+            if menu.type(index) == "cascade" and menu.entrycget(index, "label") == "업데이트":
+                return
         updates = tk.Menu(menu, tearoff=False)
         updates.add_command(label=f"현재 버전: {__version__}", state="disabled")
+        updates.add_command(label=self.status.get(), state="disabled")
+        updates.configure(postcommand=lambda: updates.entryconfigure(1, label=self.status.get()))
+        updates.add_separator()
         updates.add_command(label="업데이트 확인", command=self.check,
                             state="normal" if self.supported else "disabled")
         updates.add_checkbutton(label="자동 확인·다운로드·종료 시 적용", variable=self.auto,
@@ -77,8 +85,6 @@ class UpdateController:
         frame = ttk.Frame(parent, padding=(12, 4))
         frame.pack(side="bottom", fill="x", before=packed[0] if packed else None)
         ttk.Label(frame, textvariable=self.status, wraplength=620).pack(side="left", fill="x", expand=True)
-        ttk.Button(frame, text="업데이트 확인", command=self.check,
-                   state="normal" if self.supported else "disabled").pack(side="right", padx=(8, 0))
         return frame
 
     def toggle_auto(self):

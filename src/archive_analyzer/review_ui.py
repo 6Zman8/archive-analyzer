@@ -1485,9 +1485,23 @@ class ReviewWindow:
             self._quarantine_text.set(f"격리 폴더: {self._quarantine_root}")
         self._worker = ReviewWorker(database, source)
         self._thumbnail_worker = ThumbnailWorker(database)
+        self._commands = {}
+        self._bulk_group_buttons = []
+        self._default_all_group_buttons = []
+        self._visible_action_buttons = []
+        self._build_command_menus()
 
         body = ttk.Frame(self._window, padding=10)
         body.pack(fill="both", expand=True)
+        toolbar = ttk.Frame(body)
+        toolbar.pack(fill="x", pady=(0, 8))
+        self._command_button(toolbar, "검사 화면").pack(side="left")
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=10)
+        self._command_button(toolbar, "이미지 정밀분석").pack(side="left")
+        self._command_button(toolbar, "추천값 일괄 적용", text="추천 적용").pack(side="left", padx=6)
+        self._long_cancel_button = ttk.Button(toolbar, text="작업 중단",
+            command=self._cancel_long_operation, state="disabled")
+        self._long_cancel_button.pack(side="right")
         panes = ttk.Panedwindow(body, orient="horizontal")
         panes.pack(fill="both", expand=True)
         left = ttk.Frame(panes, padding=(0, 0, 8, 0))
@@ -1501,20 +1515,27 @@ class ReviewWindow:
         panes.add(right, weight=5)
 
         self._group_tabs = ttk.Notebook(left, height=1)
-        for label in ("후보 그룹", "검토됨", "격리됨", "휴지통·제거 이력", "문제 파일"):
+        for label in ("후보", "검토됨", "격리됨", "휴지통", "문제"):
             self._group_tabs.add(ttk.Frame(self._group_tabs), text=label)
-        self._group_tabs.pack(fill="x")
+        self._group_tabs.pack(fill="x", pady=(0, 6))
         self._group_tabs.bind("<<NotebookTabChanged>>", self._apply_group_filter)
-        search_entry = ttk.Entry(left, textvariable=self._search_text)
-        search_entry.pack(fill="x", pady=(4, 4))
+        search_row = ttk.Frame(left)
+        search_row.pack(fill="x", pady=(0, 4))
+        ttk.Label(search_row, text="작품 검색").pack(side="left", padx=(0, 8))
+        search_entry = ttk.Entry(search_row, textvariable=self._search_text)
+        search_entry.pack(side="left", fill="x", expand=True)
         search_entry.bind("<KeyRelease>", self._apply_group_filter)
+        sort_row = ttk.Frame(left)
+        sort_row.pack(fill="x", pady=(0, 4))
+        self._menu_button(sort_row, "목록 설정", self._group_options_menu).pack(side="right", padx=(6, 0))
+        ttk.Label(sort_row, text="정렬").pack(side="left", padx=(0, 8))
         sort_box = ttk.Combobox(
-            left,
+            sort_row,
             textvariable=self._sort_text,
             values=("작품명", "신뢰도", "파일 수", "재검토 우선", "최근 작업순", "최근 검토순", "최근 격리·복원순", "최근 휴지통 이동순"),
             state="readonly",
         )
-        sort_box.pack(fill="x", pady=(0, 4))
+        sort_box.pack(side="left", fill="x", expand=True)
         sort_box.bind(
             "<<ComboboxSelected>>",
             lambda event: self._apply_group_filter(event, reset_table_sort=True),
@@ -1565,43 +1586,16 @@ class ReviewWindow:
         )
         group_tools = ttk.Frame(left)
         group_tools.pack(fill="x", pady=(4, 0))
-        ttk.Button(group_tools, text="표시 열", command=lambda: self._group_table.choose_columns(self._window)).pack(side="left")
-        ttk.Button(
-            group_tools,
-            text="그룹 필터",
-            command=lambda: self._group_table.open_filters(self._window),
-        ).pack(side="left")
-        ttk.Button(group_tools, text="전체선택", command=self._group_table.select_all_visible).pack(side="left", padx=4)
+        self._command_button(group_tools, "이전 그룹", text="이전").pack(side="left")
+        self._command_button(group_tools, "다음 그룹", text="다음").pack(side="left", padx=4)
         self._group_count_text = tk.StringVar(value="표시 0 · 선택 0")
-        ttk.Label(left, textvariable=self._group_count_text).pack(anchor="w")
-        ttk.Button(group_tools, text="필터 해제", command=self._clear_group_filters).pack(side="left")
-        bulk_controls = ttk.Frame(body)
-        bulk_controls.pack(fill="x", pady=(4, 4), before=panes)
-        policy_button = ttk.Button(bulk_controls, text="추천 기준 설정", command=self._configure_recommendations, style="Primary.TButton")
-        self._bulk_group_buttons = [policy_button]
-        self._default_all_group_buttons = []
-        self._buttons.append(policy_button)
-        for text, command in (
-            ("추천값 일괄 적용", self._preview_and_apply_recommendations),
-            ("추정값 일괄 적용", lambda: self._preview_and_apply_recommendations(allow_estimates=True)),
-            ("검토결과 일괄작업", self._preview_batch_actions),
-            ("미검토 일괄 보존", self._keep_unreviewed),
-            ("선택 그룹 휴지통 이동", self._start_group_trash),
-            ("선택 그룹 격리 되돌리기", lambda: self._start_group_recovery("batch_restore")),
-            ("선택 그룹 검토 초기화", lambda: self._start_group_recovery("reset_reviews")),
-        ):
-            button = ttk.Button(bulk_controls, text=text, command=command, style=action_style(text))
-            self._bulk_group_buttons.append(button)
-            if text in {"추천값 일괄 적용", "추정값 일괄 적용", "검토결과 일괄작업", "미검토 일괄 보존"}:
-                self._default_all_group_buttons.append(button)
-            self._buttons.append(button)
+        ttk.Label(left, textvariable=self._group_count_text).pack(anchor="w", pady=(3, 0))
 
         self._detail_heading = tk.StringVar(value="파일 (여러 개 선택 가능)")
         member_heading = ttk.Frame(right)
         member_heading.pack(fill="x")
         self._member_details = False
-        ttk.Button(member_heading, text="요약 / 상세 열", command=self._toggle_member_columns).pack(side="right", padx=4)
-        ttk.Button(member_heading, text="표시 열", command=lambda: self._member_table.choose_columns(self._window)).pack(side="right")
+        self._menu_button(member_heading, "표 설정", self._member_options_menu).pack(side="right")
         ttk.Label(member_heading, textvariable=self._detail_heading, width=1).pack(side="left",fill="x",expand=True)
         member_frame = ttk.Frame(right)
         member_frame.pack(fill="x", expand=False, pady=(4, 0))
@@ -1639,56 +1633,14 @@ class ReviewWindow:
         self._member_lasso_border = tuple(
             tk.Frame(self._member_tree, background="#0078d4") for _ in range(4)
         )
-        ttk.Button(
-            member_heading,
-            text="파일 필터",
-            command=lambda: self._member_table.open_filters(self._window),
-        ).pack(side="right")
-
         file_controls = ttk.Frame(right)
-        file_controls.pack(fill="x", pady=(0, 6))
-        file_buttons = []
-        for index, (text, command) in enumerate(
-            (
-                ("보존", lambda: self._submit_selected(ReviewAction.KEEP)),
-                ("제거 후보", lambda: self._submit_selected(ReviewAction.REMOVE_CANDIDATE)),
-                ("탐색기에서 위치 열기", self._reveal_selected_file),
-                ("반디뷰로 열기", self._open_selected_in_bandiview),
-            )
-        ):
-            button = ttk.Button(file_controls, text=text, command=command, style=action_style(text))
-            file_buttons.append(button)
-            self._buttons.append(button)
-        _flow_buttons(file_controls, file_buttons)
-        analysis_button = ttk.Button(bulk_controls, text="이미지 정밀분석", command=self._start_precision_analysis, style="Primary.TButton")
-        advanced_button = ttk.Button(bulk_controls, text="고급 분석 ▾", command=self._show_analysis_menu)
-        self._bulk_group_buttons.append(advanced_button)
-        self._buttons.append(advanced_button)
-        self._bulk_group_buttons.append(analysis_button)
-        self._buttons.append(analysis_button)
-        self._long_cancel_button = ttk.Button(bulk_controls, text="작업 중단",
-            command=self._cancel_long_operation, state="disabled")
-        _flow_buttons(bulk_controls, [*self._bulk_group_buttons, self._long_cancel_button])
-
-        quarantine_controls = ttk.Frame(body)
-        quarantine_controls.pack(fill="x", pady=(4, 0))
-        quarantine_buttons = []
-        for index, (text, command) in enumerate(
-            (
-                ("격리 폴더 선택", self._choose_quarantine_directory),
-                ("선택 파일 격리", self._start_quarantine),
-                ("선택 파일 되돌리기", self._start_restore),
-                ("선택 파일 휴지통 이동", self._start_delete),
-            )
-        ):
-            button = ttk.Button(quarantine_controls, text=text, command=command, style=action_style(text))
-            quarantine_buttons.append(button)
-            self._buttons.append(button)
-        _flow_buttons(quarantine_controls, quarantine_buttons)
-        ttk.Label(body, textvariable=self._quarantine_text).pack(fill="x")
+        file_controls.pack(fill="x", pady=(4, 8))
+        self._command_button(file_controls, "보존").pack(side="left")
+        self._command_button(file_controls, "제거 후보").pack(side="left", padx=6)
+        self._menu_button(file_controls, "선택 파일", self._file_actions_menu).pack(side="left")
 
         preview_frame = ttk.LabelFrame(
-            right, text="선택한 파일 미리보기 (이미지 위에서 휠 ↑ 이전 / ↓ 다음)"
+            right, text="이미지 비교 · 마우스 휠로 페이지 이동"
         )
         preview_frame.pack(fill="both", expand=True, pady=(0, 10))
         self._preview_frame = preview_frame
@@ -1698,14 +1650,11 @@ class ReviewWindow:
         preview_tools = ttk.Frame(preview_frame)
         preview_tools.grid(row=0, column=0, columnspan=2, sticky="ew")
         self._preview_expanded = False
-        ttk.Button(preview_tools, text="이전 페이지", command=lambda: self._move_preview_page(0, -1)).pack(side="left")
-        ttk.Button(preview_tools, text="다음 페이지", command=lambda: self._move_preview_page(0, 1)).pack(side="left", padx=4)
-        ttk.Checkbutton(preview_tools, text="두 파일 함께 넘기기", variable=self._preview_sync).pack(side="left")
-        self._unmatched_button = ttk.Button(preview_tools, text="차이 후보 페이지", command=self._show_unmatched_page)
-        self._unmatched_button.pack(side="left", padx=4)
-        ttk.Button(preview_tools, text="좌우 교환", command=self._swap_previews).pack(side="right")
-        ttk.Button(preview_tools, text="확대 / 복귀", command=self._toggle_preview_expand).pack(side="right", padx=4)
-        ttk.Button(preview_tools, text="가로 / 세로 배치", command=self._toggle_preview_layout).pack(side="right", padx=4)
+        self._command_button(preview_tools, "이전 페이지", text="이전 쪽").pack(side="left")
+        self._command_button(preview_tools, "다음 페이지", text="다음 쪽").pack(side="left", padx=4)
+        ttk.Checkbutton(preview_tools, text="함께 넘기기", variable=self._preview_sync).pack(side="left")
+        self._command_button(preview_tools, "확대 / 복귀").pack(side="right")
+        self._menu_button(preview_tools, "비교 도구", self._preview_options_menu).pack(side="right", padx=4)
         preview_frame.rowconfigure(1, weight=1)
         for index in range(2):
             preview_frame.columnconfigure(index, weight=1, uniform="preview")
@@ -1780,30 +1729,12 @@ class ReviewWindow:
         )
         self._edge_tree.bind("<<TreeviewSelect>>", self._select_edge)
         self._edge_table.restore_columns(("pair", "relation", "evidence"))
-        ttk.Button(edge_heading, text="표시 열", command=lambda: self._edge_table.choose_columns(self._window)).pack(side="right", padx=4)
+        self._menu_button(edge_heading, "관계 설정", self._edge_options_menu).pack(side="right")
         self._edge_tree.column("pair", width=65)
         self._edge_tree.column("relation", width=100)
         self._edge_tree.column("evidence", width=220, stretch=True)
         self._edge_tree.bind("<Double-Button-1>", self._show_edge_evidence)
         self._edge_tree.bind("<ButtonRelease-1>", self._save_edge_widths, add="+")
-        ttk.Button(
-            edge_heading,
-            text="관계 필터",
-            command=lambda: self._edge_table.open_filters(self._window),
-        ).pack(side="right")
-
-        controls = quarantine_controls
-        button_specs = (
-            ("검사 화면", self._request_close),
-            ("이전", lambda: self._move_group(-1)),
-            ("다음", lambda: self._move_group(1)),
-            ("후보 CSV 내보내기", self._choose_export),
-        )
-        for index, (text, command) in enumerate(button_specs):
-            button = ttk.Button(controls, text=text, command=command)
-            quarantine_buttons.append(button)
-            self._buttons.append(button)
-        _flow_buttons(quarantine_controls, quarantine_buttons)
         self._operation_progress = ttk.Progressbar(
             body, mode="determinate", maximum=1, value=0
         )
@@ -1823,6 +1754,129 @@ class ReviewWindow:
         self._worker.submit_load()
         self._set_buttons_enabled(False)
         self._window.after(100, self._poll_worker)
+
+    def _build_command_menus(self) -> None:
+        from archive_analyzer.ui_commands import MenuAction
+
+        self._menubar = self._tk.Menu(self._window)
+        self._window.configure(menu=self._menubar)
+
+        def menu(label):
+            value = self._tk.Menu(self._menubar, tearoff=False)
+            self._menubar.add_cascade(label=label, menu=value)
+            return value
+
+        def action(parent, label, callback, *, busy=True, group=False, all_groups=False):
+            item = MenuAction(parent, label, callback)
+            self._commands[label] = item
+            if busy:
+                self._buttons.append(item)
+            if group:
+                self._bulk_group_buttons.append(item)
+            if all_groups:
+                self._default_all_group_buttons.append(item)
+            return item
+
+        files = menu("파일")
+        action(files, "검사 화면", self._request_close, busy=False)
+        action(files, "후보 CSV 내보내기", self._choose_export)
+        files.add_separator()
+        action(files, "격리 폴더 선택", self._choose_quarantine_directory)
+        files.add_command(label=self._quarantine_text.get(), state="disabled")
+        location_index = files.index("end")
+        files.configure(postcommand=lambda: files.entryconfigure(location_index, label=self._quarantine_text.get()))
+
+        groups = menu("그룹 작업")
+        for label, callback in (
+            ("추천값 일괄 적용", self._preview_and_apply_recommendations),
+            ("추정값 일괄 적용", lambda: self._preview_and_apply_recommendations(allow_estimates=True)),
+            ("검토결과 일괄작업", self._preview_batch_actions),
+            ("미검토 일괄 보존", self._keep_unreviewed),
+        ):
+            action(groups, label, callback, group=True, all_groups=True)
+        groups.add_separator()
+        for label, callback in (
+            ("선택 그룹 격리 되돌리기", lambda: self._start_group_recovery("batch_restore")),
+            ("선택 그룹 검토 초기화", lambda: self._start_group_recovery("reset_reviews")),
+            ("선택 그룹 휴지통 이동", self._start_group_trash),
+        ):
+            action(groups, label, callback, group=True)
+        groups.add_separator()
+        action(groups, "이전 그룹", lambda: self._move_group(-1))
+        action(groups, "다음 그룹", lambda: self._move_group(1))
+
+        self._file_actions_menu = selected = menu("선택 파일")
+        action(selected, "보존", lambda: self._submit_selected(ReviewAction.KEEP))
+        action(selected, "제거 후보", lambda: self._submit_selected(ReviewAction.REMOVE_CANDIDATE))
+        selected.add_separator()
+        action(selected, "탐색기에서 위치 열기", self._reveal_selected_file)
+        action(selected, "반디뷰로 열기", self._open_selected_in_bandiview)
+        selected.add_separator()
+        action(selected, "선택 파일 격리", self._start_quarantine)
+        action(selected, "선택 파일 되돌리기", self._start_restore)
+        action(selected, "선택 파일 휴지통 이동", self._start_delete)
+
+        analysis = menu("분석")
+        action(analysis, "이미지 정밀분석", self._start_precision_analysis, group=True)
+        action(analysis, "페이지 포함 관계 분석", self._start_sequence_analysis, group=True)
+        action(analysis, "판본 차이 분석", self._start_edition_analysis, group=True)
+        analysis.add_separator()
+        action(analysis, "추천 기준 설정", self._configure_recommendations, group=True)
+
+        view = menu("보기")
+        for attribute, label in (("_group_options_menu", "그룹 목록"),
+                                 ("_member_options_menu", "파일 목록"),
+                                 ("_edge_options_menu", "비교 관계"),
+                                 ("_preview_options_menu", "이미지 비교")):
+            child = self._tk.Menu(view, tearoff=False)
+            setattr(self, attribute, child)
+            view.add_cascade(label=label, menu=child)
+        for label, callback in (
+            ("그룹 필터", lambda: self._group_table.open_filters(self._window)),
+            ("그룹 필터 해제", self._clear_group_filters),
+            ("그룹 전체선택", lambda: self._group_table.select_all_visible()),
+            ("그룹 표시 열", lambda: self._group_table.choose_columns(self._window)),
+        ):
+            action(self._group_options_menu, label, callback, busy=False)
+        for label, callback in (
+            ("요약 / 상세 열", self._toggle_member_columns),
+            ("파일 표시 열", lambda: self._member_table.choose_columns(self._window)),
+            ("파일 필터", lambda: self._member_table.open_filters(self._window)),
+        ):
+            action(self._member_options_menu, label, callback, busy=False)
+        action(self._edge_options_menu, "관계 표시 열", lambda: self._edge_table.choose_columns(self._window), busy=False)
+        action(self._edge_options_menu, "관계 필터", lambda: self._edge_table.open_filters(self._window), busy=False)
+        for label, callback in (
+            ("차이 후보 페이지", self._show_unmatched_page),
+            ("좌우 교환", self._swap_previews),
+            ("가로 / 세로 배치", self._toggle_preview_layout),
+            ("확대 / 복귀", self._toggle_preview_expand),
+            ("이전 페이지", lambda: self._move_preview_page(0, -1)),
+            ("다음 페이지", lambda: self._move_preview_page(0, 1)),
+        ):
+            action(self._preview_options_menu, label, callback, busy=False)
+        help_menu = menu("도움말")
+        help_menu.add_command(label="기능 위치 안내", command=self._show_command_guide)
+
+    def _command_button(self, parent, name, *, text=None):
+        button = self._commands[name].add_button(parent, text=text, style=action_style(name))
+        self._visible_action_buttons.append(button)
+        return button
+
+    @staticmethod
+    def _menu_button(parent, label, menu):
+        from tkinter import ttk
+        return ttk.Menubutton(parent, text=label, menu=menu, direction="below")
+
+    def _show_command_guide(self):
+        self._messagebox.showinfo("기능 위치 안내",
+            "그룹 작업: 추천·추정값 적용, 검토결과 일괄작업, 복원·초기화·휴지통\n\n"
+            "선택 파일: 보존·제거 후보, 탐색기·반디뷰, 격리·되돌리기·휴지통\n\n"
+            "분석: 이미지 정밀분석, 페이지 포함 관계, 판본 차이, 추천 기준 설정\n\n"
+            "보기: 목록의 표시 열·필터, 이미지 비교 도구\n\n"
+            "파일: 검사 화면, CSV 내보내기, 격리 폴더 선택\n\n"
+            "여러 항목 선택: Ctrl/Shift 또는 빈 곳에서 드래그\n"
+            "이미지 페이지 이동: 마우스 휠 / 이전 쪽·다음 쪽")
 
     def request_close(self) -> None:
         self._request_close()

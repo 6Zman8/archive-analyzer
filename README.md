@@ -21,6 +21,7 @@ Windows 10/11 64비트를 지원합니다. RAR·7z를 읽으려면 7-Zip이 필�
 실패하면 기존 파일을 유지하거나 복구합니다. **기능 추가 전 구버전은 한 번 직접 교체해야 합니다.**
 
 - [사용 방법](docs/USER_GUIDE.md)
+- [정리된 화면과 기능 위치](docs/UI_GUIDE.md)
 - [자동 업데이트 설정과 새 버전 배포 방법](docs/UPDATES.md)
 - [새 버전 배포 화면](https://github.com/6Zman8/archive-analyzer/actions/workflows/release.yml)
 

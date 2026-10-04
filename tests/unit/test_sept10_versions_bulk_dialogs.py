@@ -188,7 +188,7 @@ def _native(tmp_path):
         window._render_groups((group,));window._finish_operation();root.update()
         window._group_tree.selection_remove(*window._group_tree.selection());root.update()
         assert len(window._default_all_group_buttons)==4
-        assert all(str(b['state'])=='normal' for b in window._default_all_group_buttons)
+        assert all(str(b.cget('state'))=='normal' for b in window._default_all_group_buttons)
         assert window._messagebox.parent is window._window
         for monitor,_,_ in win32api.EnumDisplayMonitors():
             left,top,right,bottom=win32api.GetMonitorInfo(monitor)['Work']

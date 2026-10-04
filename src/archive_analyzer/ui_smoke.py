@@ -106,7 +106,7 @@ def run(database: Path, source: Path) -> int:
         window._select_edge()
         root.update()
         assert '일치 1쪽' in window._edge_summary.get()
-        window._unmatched_button.invoke()
+        window._commands["차이 후보 페이지"].invoke()
         assert window._preview_page_indices == {
             evidence_edge.left_archive_id: 1, evidence_edge.right_archive_id: 1}
         assert '차이 후보' in window._status.get()
@@ -139,7 +139,7 @@ def run(database: Path, source: Path) -> int:
         root.update()
         assert len(window._batch_group_keys()) == 600
         assert len(window._default_all_group_buttons) == 4
-        assert all(str(button['state']) == 'normal' for button in window._default_all_group_buttons)
+        assert all(str(button.cget('state')) == 'normal' for button in window._default_all_group_buttons)
         assert window._messagebox.parent is window._window
         from archive_analyzer.dialogs import center_dialog
         import win32api, win32con

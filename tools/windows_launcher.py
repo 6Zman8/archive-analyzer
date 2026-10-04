@@ -2,7 +2,21 @@ import sys
 from pathlib import Path
 
 
+def configure_output():
+    # Windowed Python has no console streams. Some dependencies replace them
+    # with locale-encoded devnull streams, which fail on Korean paths on an
+    # English Windows host. Establish Unicode-safe streams before imports.
+    import os
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name)
+        if stream is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+        elif hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def main():
+    configure_output()
     # Dispatch before importing the desktop, so an updater never opens user data.
     if len(sys.argv) == 3 and sys.argv[1] == "--packaged-update-session":
         from archive_analyzer.update_smoke import run

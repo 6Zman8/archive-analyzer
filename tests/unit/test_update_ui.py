@@ -92,3 +92,21 @@ def test_network_error_is_nonblocking(ui):
     assert controller.pending is None
     assert target.read_bytes() == b"MZold"
     controller.close()
+
+
+def test_update_menu_preserves_workspace_commands_and_is_not_duplicated(ui):
+    root, target, directory = ui
+    existing = tk.Menu(root, tearoff=False)
+    files = tk.Menu(existing, tearoff=False)
+    calls = []
+    files.add_command(label="검사 화면", command=lambda: calls.append("scanner"))
+    existing.add_cascade(label="파일", menu=files)
+    root.configure(menu=existing)
+    controller = UpdateController(root, target=target, directory=directory, enabled=True, checker=lambda: None)
+    controller.attach_menu(root, lambda: None)
+    controller.attach_menu(root, lambda: None)
+    assert root.nametowidget(root.cget("menu")) is existing
+    assert [existing.entrycget(i, "label") for i in range(existing.index("end") + 1)] == ["파일", "업데이트"]
+    files.invoke(0)
+    assert calls == ["scanner"]
+    controller.close()

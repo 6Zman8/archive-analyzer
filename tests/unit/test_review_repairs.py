@@ -128,7 +128,9 @@ def test_real_tk_preview_stays_stable_on_wheel_and_resize(tmp_path, monkeypatch)
             window._window.geometry(geometry)
             pump()
             assert reader.calls == before_resize, "resizing re-extracted archive pages"
-            for button in (*window._buttons, window._long_cancel_button):
+            # Secondary actions are reachable from named menus; only toolbar
+            # widgets participate in viewport geometry.
+            for button in (*window._visible_action_buttons, window._long_cancel_button):
                 assert button.winfo_ismapped(), button.cget("text")
                 assert button.winfo_x() + button.winfo_width() <= button.master.winfo_width() + 1, button.cget("text")
         # Four-row file/evidence tables reserve more height than the old two-row layout.

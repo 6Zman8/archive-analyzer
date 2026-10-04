@@ -17,7 +17,7 @@ class Idle:
     def submit_load(self): pass
     def poll_result(self): return None
 
-def capture(window,path):
+def capture(window,path,*,include_frame=False):
     user,gdi=c.windll.user32,c.windll.gdi32
     user.GetDC.restype=c.c_void_p
     gdi.CreateCompatibleDC.argtypes=[c.c_void_p];gdi.CreateCompatibleDC.restype=c.c_void_p
@@ -28,6 +28,13 @@ def capture(window,path):
     gdi.DeleteObject.argtypes=[c.c_void_p];gdi.DeleteDC.argtypes=[c.c_void_p]
     user.ReleaseDC.argtypes=[c.c_void_p,c.c_void_p]
     hwnd=window.winfo_id();width,height=window.winfo_width(),window.winfo_height()
+    if include_frame:
+        from ctypes.wintypes import RECT
+        user.GetParent.argtypes=[c.c_void_p];user.GetParent.restype=c.c_void_p
+        user.GetWindowRect.argtypes=[c.c_void_p,c.POINTER(RECT)]
+        hwnd=user.GetParent(hwnd)
+        rect=RECT();assert user.GetWindowRect(hwnd,c.byref(rect))
+        width,height=rect.right-rect.left,rect.bottom-rect.top
     dc=user.GetDC(hwnd);mem=gdi.CreateCompatibleDC(dc);bitmap=gdi.CreateCompatibleBitmap(dc,width,height);old=gdi.SelectObject(mem,bitmap)
     class Header(c.Structure):
         _fields_=[('size',c.c_uint32),('width',c.c_int32),('height',c.c_int32),('planes',c.c_uint16),('bits',c.c_uint16),('compression',c.c_uint32),('sizeimage',c.c_uint32),('x',c.c_int32),('y',c.c_int32),('used',c.c_uint32),('important',c.c_uint32)]
@@ -48,15 +55,17 @@ with TemporaryDirectory() as directory:
     with patch.object(review_ui,'ReviewWorker',Idle),patch.object(review_ui,'ThumbnailWorker',Idle),patch.object(review_ui.ReviewWindow,'_request_previews',lambda *a,**k:None),patch.object(review_ui,'UiSettingsStore',lambda:UiSettingsStore(base/'ui.json')):
         try:
             window=review_ui.ReviewWindow(root,base/'index.db',base);window._window.attributes('-alpha',0);window._window.attributes('-toolwindow',True)
+            window._window.maxsize(4096,4096)
             window._render_groups(tuple(replace(group,group_key=f'g{i}',set_key=f'g{i}',work_label=f'[해오름(윤)] 日本語 여름 산책 {i:03}', recommendation_text="보존 추천: 1번 파일", recommendation_status="RECOMMENDED") for i in range(600)))
             window._finish_operation()
             window._status.set("완료 · 이미지 정밀분석 · 600개 그룹")
             window._operation_progress.configure(value=1)
-            for width,height in ((1440,960),(1280,860)):
+            for width,height in ((1440,960),(1280,860),(1000,700)):
                 window._window.geometry(f'{width}x{height}');root.update();root.update_idletasks()
                 for index,(image,name,page) in enumerate(window._preview_slots):
                     image.configure(text='비교 이미지 영역');name.configure(text=f'{"A" if index==0 else "B"} · {index+1}번 · {members[index].file_name}\nE:\\보관함\\예시');page.configure(text='12 / 32 페이지')
                 root.update();capture(window._window,Path(f'build/ux-followup-preview-{width}.png'))
+                capture(window._window,Path(f'build/ux-followup-window-{width}.png'),include_frame=True)
                 print(width,'group-height',window._group_tree.winfo_height(),'member-height',window._member_tree.winfo_height(),'preview-height',window._preview_slots[0][0].winfo_height())
         finally:
             root.destroy()

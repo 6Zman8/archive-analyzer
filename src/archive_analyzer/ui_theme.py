@@ -15,6 +15,9 @@ def apply_review_theme(window):
     style.configure("TButton", padding=(9, 5), background="#2a313c")
     style.map("TButton", background=[("active", "#354254"), ("disabled", "#232831")],
               foreground=[("disabled", "#8d97a6")])
+    style.configure("TMenubutton", padding=(9, 5), background="#2a313c", arrowsize=8, arrowcolor=ink)
+    style.map("TMenubutton", background=[("active", "#354254"), ("disabled", "#232831")],
+              foreground=[("disabled", "#8d97a6")])
     for name, color, active in (("Primary", "#285b91", "#3978b7"),
                                 ("Keep", "#205b48", "#2c7960"),
                                 ("Caution", "#73512b", "#946a36"),

@@ -708,7 +708,6 @@ def launch_gui() -> int:
         window.withdraw()
         review_windows.append(review)
         updater.attach_menu(review._window, close_window)
-        updater.attach_status(review._window)
         return review
     progress_reader: ProgressReader | None = None
     latest_progress: ProgressSnapshot | None = None

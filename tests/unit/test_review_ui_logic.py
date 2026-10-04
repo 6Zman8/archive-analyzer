@@ -1108,12 +1108,29 @@ def test_review_window_preview_grid_expands_and_tables_keep_fixed_heights(
         def save_widths(self) -> None:
             pass
 
+    class FakeMenu(FakeWidget):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.entries = []
+        def add_command(self, **kwargs):
+            self.entries.append({"state": "normal", **kwargs})
+        add_cascade = add_command
+        def add_separator(self):
+            self.entries.append({})
+        def index(self, _index):
+            return len(self.entries) - 1
+        def entrycget(self, index, option):
+            return self.entries[index][option]
+        def entryconfigure(self, index, **kwargs):
+            self.entries[index].update(kwargs)
+
     tkinter = SimpleNamespace(
         Toplevel=FakeTopLevel,
         StringVar=FakeStringVar,
         BooleanVar=FakeStringVar,
         Frame=FakeWidget,
         Label=FakeWidget,
+        Menu=FakeMenu,
         filedialog=object(),
         messagebox=object(),
         simpledialog=object(),
@@ -1127,6 +1144,8 @@ def test_review_window_preview_grid_expands_and_tables_keep_fixed_heights(
             Treeview=FakeTreeview,
             Scrollbar=FakeWidget,
             Button=FakeWidget,
+            Menubutton=FakeWidget,
+            Separator=FakeWidget,
             Checkbutton=FakeWidget,
             LabelFrame=FakeLabelFrame,
             Progressbar=FakeWidget,
@@ -1141,7 +1160,7 @@ def test_review_window_preview_grid_expands_and_tables_keep_fixed_heights(
 
     window = review_ui.ReviewWindow(object(), Path("index.db"), Path("source"))
 
-    preview = next(frame for frame in FakeLabelFrame.instances if "미리보기" in frame.kwargs["text"])
+    preview = window._preview_frame
     assert (1, {"weight": 1}) in preview.rowconfigure_calls
     assert [tree.kwargs["height"] for tree in FakeTreeview.instances] == [4, 4, 4]
     assert window._member_tree is FakeTreeview.instances[1]
