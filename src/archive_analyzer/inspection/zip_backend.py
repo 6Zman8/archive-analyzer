@@ -81,7 +81,15 @@ def _preflight_central_directory(path: Path) -> None:
             - central_offset
         )
         if end_record[zipfile._ECD_SIGNATURE] == zipfile.stringEndArchive64:  # type: ignore[attr-defined]
-            concatenated_offset -= zipfile.sizeEndCentDir64 + zipfile.sizeEndCentDir64Locator
+            # Newer Python returns the ZIP64 record location itself; older
+            # versions return the following ordinary EOCD. Inspect the actual
+            # signature rather than relying on a private API's version semantics.
+            stream.seek(int(end_record[zipfile._ECD_LOCATION]))
+            signature = stream.read(4)
+            if signature == zipfile.stringEndArchive:
+                concatenated_offset -= zipfile.sizeEndCentDir64 + zipfile.sizeEndCentDir64Locator
+            elif signature != zipfile.stringEndArchive64:
+                raise BadZipFile("Invalid ZIP64 end record location")
         start = central_offset + concatenated_offset
         if start < 0:
             raise BadZipFile("Bad offset for central directory")
