@@ -110,3 +110,35 @@ def test_update_menu_preserves_workspace_commands_and_is_not_duplicated(ui):
     files.invoke(0)
     assert calls == ["scanner"]
     controller.close()
+
+
+def test_turning_auto_off_cancels_pending_install_even_when_settings_cannot_save(ui, monkeypatch):
+    root, target, directory = ui
+    controller = UpdateController(root, target=target, directory=directory, enabled=True, checker=lambda: None)
+    controller.pending = object()
+    calls = []
+    monkeypatch.setattr("archive_analyzer.update_ui.launch_installer", calls.append)
+    def disk_full(*args):
+        raise OSError("disk full")
+    monkeypatch.setattr("archive_analyzer.update_ui.write_json", disk_full)
+    controller.auto.set(False)
+    controller.toggle_auto()
+    assert controller.cancel.is_set()
+    assert controller.pending is None
+    assert "저장" in controller.status.get()
+    controller.close()
+    assert not calls
+
+
+def test_close_finishes_when_helper_and_error_record_both_fail(ui, monkeypatch):
+    root, target, directory = ui
+    controller = UpdateController(root, target=target, directory=directory, enabled=True, checker=lambda: None)
+    controller.pending = object()
+    def disk_full(*args):
+        raise OSError("disk full")
+    monkeypatch.setattr("archive_analyzer.update_ui.launch_installer", disk_full)
+    monkeypatch.setattr("archive_analyzer.update_ui.write_json", disk_full)
+    controller.close()
+    assert controller.closed
+    assert controller.cancel.is_set()
+    controller.close()

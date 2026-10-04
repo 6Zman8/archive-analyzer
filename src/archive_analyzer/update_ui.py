@@ -88,17 +88,19 @@ class UpdateController:
         return frame
 
     def toggle_auto(self):
-        try:
-            write_json(self.directory / "settings.json", {"automatic": bool(self.auto.get())})
-        except OSError:
-            self.status.set("업데이트 설정을 저장하지 못했습니다.")
-            return
-        if self.auto.get():
+        automatic = bool(self.auto.get())
+        # Honor the current session's choice even when persistence is unavailable.
+        if automatic:
             self.check()
         else:
             self.cancel.set()
             self.pending = None
             self.status.set(f"v{__version__} · 자동 업데이트 꺼짐")
+        try:
+            write_json(self.directory / "settings.json", {"automatic": automatic})
+        except OSError:
+            state = "켜짐" if automatic else "꺼짐"
+            self.status.set(f"자동 업데이트 {state} · 설정 저장 실패 (이번 실행에만 적용)")
 
     def _automatic_check(self):
         self.auto_id = None
@@ -174,5 +176,9 @@ class UpdateController:
             try:
                 launch_installer(self.pending)
             except Exception as error:
-                write_json(self.directory / "last-result.json",
-                           {"status": "failed", "message": str(error)})
+                try:
+                    write_json(self.directory / "last-result.json",
+                               {"status": "failed", "message": str(error)})
+                except OSError:
+                    # A full or read-only disk must not prevent normal shutdown.
+                    self.status.set(f"업데이트 미적용 · {error}")
