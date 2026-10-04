@@ -18,4 +18,16 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        result = main()
+    except Exception:
+        # A windowed executable would otherwise open a modal traceback dialog
+        # on an unattended build runner. This opt-in path keeps the evidence.
+        import os
+        import traceback
+        diagnostic = os.environ.get("ARCHIVE_ANALYZER_DIAGNOSTIC_LOG")
+        if not diagnostic:
+            raise
+        Path(diagnostic).write_text(traceback.format_exc(), encoding="utf-8")
+        result = 1
+    raise SystemExit(result)

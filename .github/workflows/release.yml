@@ -66,12 +66,23 @@ jobs:
       - name: Windows EXE 빌드
         shell: pwsh
         run: ./tools/build_windows_exe.ps1 -Name ArchiveAnalyzer
+      - name: 검증용 EXE 보관
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-candidate
+          path: dist/final/ArchiveAnalyzer.exe
+          retention-days: 1
+          compression-level: 0
       - name: 실제 EXE 검사
+        timeout-minutes: 12
         shell: pwsh
         run: |
           $env:ARCHIVE_ANALYZER_PACKAGED_EXE = (Resolve-Path 'dist/final/ArchiveAnalyzer.exe').Path
-          ./.venv/Scripts/python.exe -m pytest -o addopts=-ra -m packaged tests/integration/test_packaged_v1.py
-          if ($LASTEXITCODE -ne 0) { throw 'EXE 검사 실패' }
+          $env:ARCHIVE_ANALYZER_DIAGNOSTIC_LOG = Join-Path (Get-Location) 'build/packaged-error.log'
+          ./.venv/Scripts/python.exe -m pytest -o addopts=-ra -v -s -m packaged tests/integration/test_packaged_v1.py
+          $testExitCode = $LASTEXITCODE
+          if (Test-Path -LiteralPath $env:ARCHIVE_ANALYZER_DIAGNOSTIC_LOG) { Get-Content -LiteralPath $env:ARCHIVE_ANALYZER_DIAGNOSTIC_LOG }
+          if ($testExitCode -ne 0) { throw 'EXE 검사 실패' }
           ./.venv/Scripts/python.exe tools/check_release_exe.py $env:ARCHIVE_ANALYZER_PACKAGED_EXE
           if ($LASTEXITCODE -ne 0) { throw '업데이트 기동 검사 실패' }
       - name: 검증된 소스 버전 기록
