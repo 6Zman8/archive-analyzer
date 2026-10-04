@@ -32,7 +32,7 @@
 
 1. [Windows 새 버전 배포](https://github.com/6Zman8/archive-analyzer/actions/workflows/release.yml)를 엽니다.
 2. **Run workflow**를 누릅니다. 브랜치는 `main`으로 둡니다.
-3. 현재보다 큰 버전 번호(예: `1.1.1`)와 변경 내용을 입력하고 실행합니다.
+3. 현재보다 큰 버전 번호(예: `1.2.0`)와 변경 내용을 입력하고 실행합니다.
 4. 자동 검사가 끝나면 소스의 버전 번호와 태그가 기록되고, EXE와 SHA256SUMS가 Release에 공개됩니다.
 5. 사용자의 프로그램은 다음 실행 또는 6시간 내 정기 확인 때 새 버전을 받습니다.
 
