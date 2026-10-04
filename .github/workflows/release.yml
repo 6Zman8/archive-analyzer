@@ -1,0 +1,103 @@
+name: Windows 새 버전 배포
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '새 버전 번호 (예: 1.0.2, 현재보다 큰 번호)'
+        required: true
+        type: string
+      notes:
+        description: '변경 내용'
+        required: true
+        type: string
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+          cache: pip
+      - name: 배포 버전 준비
+        id: version
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if ($env:EVENT_NAME -eq 'workflow_dispatch') {
+            if ('${{ github.ref }}' -ne 'refs/heads/main') { throw 'main 브랜치에서 실행해 주세요.' }
+            python tools/release_version.py $env:REQUESTED_VERSION
+            if ($LASTEXITCODE -ne 0) { throw '버전 준비 실패' }
+            $releaseVersion = $env:REQUESTED_VERSION
+          } else {
+            $releaseVersion = $env:GITHUB_REF_NAME.Substring(1)
+            python tools/release_version.py $releaseVersion --check
+            if ($LASTEXITCODE -ne 0) { throw '태그와 소스 버전 불일치' }
+          }
+          "value=$releaseVersion" >> $env:GITHUB_OUTPUT
+      - name: 빌드 환경 설치
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          ./.venv/Scripts/python.exe -m pip install -e '.[dev]'
+          if ($LASTEXITCODE -ne 0) { throw '의존성 설치 실패' }
+      - name: 회귀 검사
+        shell: pwsh
+        run: |
+          ./.venv/Scripts/python.exe tools/run_regression.py
+          if ($LASTEXITCODE -ne 0) { throw '회귀 검사 실패' }
+      - name: Windows EXE 빌드
+        shell: pwsh
+        run: ./tools/build_windows_exe.ps1 -Name ArchiveAnalyzer
+      - name: 실제 EXE 검사
+        shell: pwsh
+        run: |
+          $env:ARCHIVE_ANALYZER_PACKAGED_EXE = (Resolve-Path 'dist/final/ArchiveAnalyzer.exe').Path
+          ./.venv/Scripts/python.exe -m pytest -o addopts=-ra -m packaged tests/integration/test_packaged_v1.py
+          if ($LASTEXITCODE -ne 0) { throw 'EXE 검사 실패' }
+          ./.venv/Scripts/python.exe tools/check_release_exe.py $env:ARCHIVE_ANALYZER_PACKAGED_EXE
+          if ($LASTEXITCODE -ne 0) { throw '업데이트 기동 검사 실패' }
+      - name: 검증된 소스 버전 기록
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/archive_analyzer/version.py
+          git commit -m "release: v$env:RELEASE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw '버전 커밋 실패' }
+          git tag "v$env:RELEASE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw '태그 생성 실패' }
+          git push --atomic origin HEAD:main "v$env:RELEASE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw '원격 브랜치 변경: 다시 실행해 주세요.' }
+      - name: GitHub Release 공개
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          $note = if ($env:RELEASE_NOTES) { $env:RELEASE_NOTES } else { "압축파일 검사기 v$env:RELEASE_VERSION" }
+          $note += "`n`nArchiveAnalyzer.exe를 다운로드해 실행하세요. 기존 자동 업데이트 사용자는 종료 후 새 버전이 적용됩니다."
+          $note | Set-Content -LiteralPath build/release-notes.txt -Encoding utf8
+          gh release create "v$env:RELEASE_VERSION" dist/final/ArchiveAnalyzer.exe dist/final/SHA256SUMS.txt --verify-tag --title "압축파일 검사기 v$env:RELEASE_VERSION" --notes-file build/release-notes.txt --latest
+          if ($LASTEXITCODE -ne 0) { throw '릴리스 공개 실패' }
