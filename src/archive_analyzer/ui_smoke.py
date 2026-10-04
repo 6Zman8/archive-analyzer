@@ -80,6 +80,9 @@ def run(database: Path, source: Path) -> int:
     window = review_ui.ReviewWindow(root, database, source)
     window._window.attributes("-alpha", 0)
     window._window.attributes("-toolwindow", True)
+    # This explicitly hidden acceptance window must retain the requested test
+    # dimensions even on the smaller virtual desktop of a build server.
+    window._window.maxsize(4096, 4096)
     report = {}
     try:
         deadline = time.monotonic() + 30

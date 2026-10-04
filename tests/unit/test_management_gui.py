@@ -33,6 +33,10 @@ def _native_layout(tmp_path, monkeypatch):
     try:
         window=review_ui.ReviewWindow(root,tmp_path/'index.db',tmp_path)
         window._window.attributes('-alpha',0)
+        # Hosted Windows can have a 1024x768 desktop. Test the intended layout
+        # without the window manager silently clamping this hidden window.
+        window._window.maxsize(4096, 4096)
+        window._window.geometry('1440x960')
         rows=tuple(replace(group,group_key=f'g{i}',set_key=f'g{i}',work_label=f'작품 {i:03}') for i in range(600))
         window._render_groups(rows)
         root.update()

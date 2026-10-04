@@ -85,6 +85,7 @@ def _native_check(tmp_path, monkeypatch):
     try:
         window = review_ui.ReviewWindow(root, tmp_path / "index.db", tmp_path)
         window._window.attributes("-alpha", 0)
+        window._window.maxsize(4096, 4096)
         groups = tuple(replace(group, group_key=f"g{i}", set_key=f"g{i}", work_label=f"{i:03} 한국어 日本語 中文 English") for i in range(600))
         window._render_groups(groups)
         window._finish_operation()

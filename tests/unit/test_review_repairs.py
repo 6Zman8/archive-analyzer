@@ -124,6 +124,7 @@ def test_real_tk_preview_stays_stable_on_wheel_and_resize(tmp_path, monkeypatch)
             assert len(window._thumbnail_images) == 2
         before_resize = reader.calls
         for geometry in ("1000x700", "1400x900", "1280x860"):
+            window._window.maxsize(4096, 4096)
             window._window.geometry(geometry)
             pump()
             assert reader.calls == before_resize, "resizing re-extracted archive pages"

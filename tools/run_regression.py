@@ -12,7 +12,7 @@ def main():
         text = path.read_text(encoding="utf-8")
         relative = str(path.relative_to(root))
         (gui if any(token in text for token in ("tkinter", "tk.Tk", "Tk()")) else ordinary).append(relative)
-    for group in [ordinary, *[[path] for path in gui]]:
+    for group in [*[[path] for path in gui], ordinary]:
         result = subprocess.run([sys.executable, "-m", "pytest", "-q", *group], cwd=root)
         if result.returncode:
             return result.returncode
